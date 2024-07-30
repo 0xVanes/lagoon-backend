@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-contract Proposal {
-    address public owner;
-    uint256 public nextThemeId;
-    uint256 public nextProposalId;
+/**
+ * @title A Donation Proposal Contract
+ * @author 
+ * @notice This contract is to make donation proposal and execute the proposal
+ */
 
+contract Proposal {
+    /* Text Declaration */
     // Struct to store proposal details
     struct ProposalDetails {
         uint256 id;
@@ -18,11 +21,17 @@ contract Proposal {
         bool executed;
     }
 
+    /* State Variable */
+    address public owner;
+    uint256 public nextThemeId;
+    uint256 public nextProposalId;
+
     // Store themes and proposals
-    mapping(uint256 => string) public themes;
+    mapping(uint256 => string) public themes; //yg theme diganti Id aja ya jd mngkn mappingnya ga usah
     mapping(uint256 => ProposalDetails) public proposals;
     mapping(uint256 => uint256[]) public proposalsByTheme;
 
+    /* Events */
     event ThemeCreated(uint256 themeId, string themeName);
     event ProposalCreated(uint256 proposalId, uint256 themeId, string title, string description, uint256 amount, address beneficiary);
     event FundsDeposited(uint256 proposalId, address donor, uint256 amount);
@@ -39,10 +48,12 @@ contract Proposal {
         themes[nextThemeId] = _themeName;
         emit ThemeCreated(nextThemeId, _themeName);
         nextThemeId++;
-    }
+    } //mngkn jadi ini ga perlu ya?
 
-    function createProposal(
-        uint256 _themeId,
+    /// @dev create proposal with struct
+    /// @param _themeId xx
+    /// @param _title xx
+    function createProposal( uint256 _themeId,
         string memory _title,
         string memory _description,
         uint256 _amount,
@@ -70,6 +81,8 @@ contract Proposal {
         return nextProposalId - 1; // Return the ID of the newly created proposal
     }
 
+    /// @dev 
+    /// @param _proposalId xx
     function deposit(uint256 _proposalId) external payable {
         ProposalDetails storage proposal = proposals[_proposalId];
         require(!proposal.executed, "Proposal already executed");
@@ -79,6 +92,8 @@ contract Proposal {
         emit FundsDeposited(_proposalId, msg.sender, msg.value);
     }
 
+    /// @dev Will give the amount gained to the beneficiary
+    /// @param _proposalId  xx
     function execute(uint256 _proposalId) external {
         ProposalDetails storage proposal = proposals[_proposalId];
         require(msg.sender == owner, "Only owner can execute");
