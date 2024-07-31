@@ -1,15 +1,19 @@
 const hre = require("hardhat");
 
 async function main() {
-  const lgnNft = await ethers.deployContract("contracts/lgnNft.sol:lgnNft");
-  const lagoonNft = await lgnNft.waitForDeployment();
-  console.log("Deploying Contract...")
-  console.log("Contract deployed to address:",  await lgnNft.getAddress());
+  const LagoonToken = await hre.ethers.getContractFactory("LagoonToken");
+  const lagoonToken = await LagoonToken.deploy("LagoonToken", "LGT", "YOUR_DEFAULT_LAGOON_ADDRESS");
+  await lagoonToken.deployed();
+
+  const lgnNft = await hre.ethers.getContractFactory("lgnNft");
+  const lagoonNFT = await lgnNft.deploy();
+  await lagoonNFT.deployed();
+
+  console.log("LagoonToken deployed to:", lagoonToken.address);
+  console.log("LagoonNFT deployed to:", lagoonNFT.address);
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
