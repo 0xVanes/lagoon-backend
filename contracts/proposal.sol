@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.0;
 
 contract Proposal {
     address public owner;
-    uint256 private  nextThemeId;
+    uint256 private nextThemeId;
     uint256 private nextProposalId;
+    uint256 private constant DURATION = 30 days; // Durasi tetap satu bulan
 
     // Struct to store proposal details
     struct ProposalDetails {
@@ -17,7 +18,6 @@ contract Proposal {
         address beneficiary;
         bool executed;
         uint256 creationTime; // Timestamp when the proposal was created
-        uint256 duration; // Duration in seconds
     }
 
     // Store themes and proposals
@@ -26,11 +26,11 @@ contract Proposal {
     mapping(uint256 => uint256[]) private proposalsByTheme;
 
     event ThemeCreated(uint256 themeId, string themeName);
-    event ProposalCreated(uint256 proposalId, uint256 themeId, string title, string description, uint256 amount, address beneficiary, uint256 duration);
+    event ProposalCreated(uint256 proposalId, uint256 themeId, string title, string description, uint256 amount, address beneficiary);
     event FundsDeposited(uint256 proposalId, address donor, uint256 amount);
-    event ProposalExecuted(uint256 proposalId);
     event FundsWithdrawn(uint256 proposalId, address withdrawer, uint256 amount);
     event ProposalDeleted(uint256 proposalId);
+    event DonationMade(address donor, uint256 amount);
 
     constructor() {
         owner = msg.sender;
@@ -50,8 +50,7 @@ contract Proposal {
         string memory _title,
         string memory _description,
         uint256 _amount,
-        address _beneficiary,
-        uint256 _duration // Duration in seconds
+        address _beneficiary
     ) external returns (uint256) {
         require(bytes(themes[_themeId]).length > 0, "Theme does not exist");
 
@@ -64,14 +63,13 @@ contract Proposal {
             balance: 0,
             beneficiary: _beneficiary,
             executed: false,
-            creationTime: block.timestamp,
-            duration: _duration
+            creationTime: block.timestamp
         });
 
         proposals[nextProposalId] = newProposal;
         proposalsByTheme[_themeId].push(nextProposalId);
 
-        emit ProposalCreated(nextProposalId, _themeId, _title, _description, _amount, _beneficiary, _duration);
+        emit ProposalCreated(nextProposalId, _themeId, _title, _description, _amount, _beneficiary);
         nextProposalId++;
 
         return nextProposalId - 1; // Return the ID of the newly created proposal
@@ -81,34 +79,17 @@ contract Proposal {
         ProposalDetails storage proposal = proposals[_proposalId];
         require(!proposal.executed, "Proposal already executed");
         require(msg.value > 0, "Must send some ether");
-        require(block.timestamp < proposal.creationTime + proposal.duration, "Deposit period has ended");
+        require(block.timestamp < proposal.creationTime + DURATION, "Deposit period has ended");
 
         proposal.balance += msg.value;
         emit FundsDeposited(_proposalId, msg.sender, msg.value);
-    }
-
-    function execute(uint256 _proposalId) external {
-        ProposalDetails storage proposal = proposals[_proposalId];
-        require(msg.sender == owner, "Only owner can execute");
-        require(!proposal.executed, "Proposal already executed");
-        require(proposal.balance >= proposal.amount, "Insufficient balance to execute");
-        require(block.timestamp >= proposal.creationTime + proposal.duration, "Proposal duration has not passed yet");
-
-        proposal.executed = true;
-
-        // Use call for transferring funds
-        (bool success, ) = proposal.beneficiary.call{value: proposal.amount}("");
-        require(success, "Transfer failed");
-
-        proposal.balance -= proposal.amount;
-
-        emit ProposalExecuted(_proposalId);
     }
 
     function withdraw(uint256 _proposalId) external {
         ProposalDetails storage proposal = proposals[_proposalId];
         require(proposal.balance > 0, "No funds to withdraw");
         require(msg.sender == owner || msg.sender == proposal.beneficiary, "Not authorized to withdraw");
+        require(block.timestamp >= proposal.creationTime + DURATION, "Proposal duration has not passed yet");
 
         uint256 amount = proposal.balance;
         proposal.balance = 0;
@@ -118,6 +99,17 @@ contract Proposal {
         require(success, "Withdrawal failed");
 
         emit FundsWithdrawn(_proposalId, msg.sender, amount);
+
+        // Mark the proposal as executed once the funds are withdrawn
+        proposal.executed = true;
+    }
+
+    function donate() external payable {
+        require(msg.value > 0, "Must send some ether");
+        (bool success, ) = owner.call{value: msg.value}("");
+        require(success, "Donation failed");
+
+        emit DonationMade(msg.sender, msg.value);
     }
 
     function getProposal(uint256 _proposalId) external view returns (ProposalDetails memory) {
@@ -137,10 +129,10 @@ contract Proposal {
 
     function getProposalStatus(uint256 _proposalId) external view returns (bool executed, bool expired) {
         ProposalDetails storage proposal = proposals[_proposalId];
-        bool isExpired = block.timestamp >= proposal.creationTime + proposal.duration;
+        bool isExpired = block.timestamp >= proposal.creationTime + DURATION;
         return (proposal.executed, isExpired);
     }
-
+    
     function deleteProposal(uint256 _proposalId) external {
         ProposalDetails storage proposal = proposals[_proposalId];
         require(msg.sender == owner, "Only owner can delete proposal");
