@@ -2,65 +2,71 @@
 pragma solidity ^0.8.19;
 
 /**
- * @title A Donation Proposal Contract
- * @author 
- * @notice This contract is to make donation proposal and execute the proposal
- */
+* @title Proposal - A contract to make donation proposals and to donate to beneficiary
+* @notice This contract prepares the proposals and handle giving the raised money to the beneficiary directly
+*/
 
 contract Proposal {
-    /* Text Declaration */
+    /* State Variables */
+    address public owner; // Owner is the one who deploy the contract
+    uint256 private nextThemeId; //Currently the theme is about Mosque, this is to add more donation themes
+    uint256 private nextProposalId; //The ID number of the proposal
+    uint256 private constant DURATION = 30 days; // The duration of the proposal
+
     // Struct to store proposal details
     struct ProposalDetails {
         uint256 id;
         uint256 themeId;
         string title;
         string description;
-        uint256 amount;
-        uint256 balance;
+        uint256 amount; //The goal of the donation
+        uint256 balance; //The raised donation
         address beneficiary;
         bool executed;
+        uint256 creationTime; // Timestamp when the proposal was created
     }
 
-    /* State Variable */
-    address public owner;
-    uint256 public nextThemeId;
-    uint256 public nextProposalId;
+    // theme ID to name of themes
+    mapping(uint256 => string) public themes;
 
-    // Store themes and proposals
-    mapping(uint256 => string) public themes; //yg theme diganti Id aja ya jd mngkn mappingnya ga usah
-    mapping(uint256 => ProposalDetails) public proposals;
-    mapping(uint256 => uint256[]) public proposalsByTheme;
+    // proposal ID to proposal details
+    mapping(uint256 => ProposalDetails) private proposals;
+
+    // proposal theme ID to proposal ID
+    mapping(uint256 => uint256[]) private proposalsByTheme;
 
     /* Events */
     event ThemeCreated(uint256 themeId, string themeName);
     event ProposalCreated(uint256 proposalId, uint256 themeId, string title, string description, uint256 amount, address beneficiary);
     event FundsDeposited(uint256 proposalId, address donor, uint256 amount);
-    event ProposalExecuted(uint256 proposalId);
+    event FundsWithdrawn(uint256 proposalId, address withdrawer, uint256 amount);
+    event ProposalDeleted(uint256 proposalId);
 
     constructor() {
         owner = msg.sender;
-        nextThemeId = 1; // Start theme IDs from 1
-        nextProposalId = 1; // Start proposal IDs from 1
+        nextThemeId = 1; // Start theme IDs from 1.
+        nextProposalId = 1; // Start proposal IDs from 1.
     }
 
+    /// @dev Initializes the creation of new theme.
+    /// @param _themeName The name of the theme.
     function createTheme(string memory _themeName) external {
         require(msg.sender == owner, "Only owner can create themes");
         themes[nextThemeId] = _themeName;
         emit ThemeCreated(nextThemeId, _themeName);
         nextThemeId++;
-    } //mngkn jadi ini ga perlu ya?
+    }
 
-    /// @dev create proposal with struct
-    /// @param _themeId xx
-    /// @param _title xx
-    function createProposal( uint256 _themeId,
-        string memory _title,
-        string memory _description,
-        uint256 _amount,
-        address _beneficiary
-    ) external returns (uint256) {
-        require(bytes(themes[_themeId]).length > 0, "Theme does not exist");
+    /// @dev Initializes the contract with the provided token name, symbol, and default Lagoon address.
+    /// @param _themeId The ID of the theme.
+    /// @param _title The title of the donation proposal.
+    /// @param _description The description of the proposal.
+    /// @param _amount The goal in ISLM of the donation.
+    /// @param _beneficiary The address of the beneficiary.
+    function createProposal(uint256 _themeId, string memory _title, string memory _description, uint256 _amount, address _beneficiary) external{
+        require(_themeId > 0 && _themeId < nextThemeId, "Theme does not exist");
 
+        //Insert all the information needed on a newProposal.
         ProposalDetails memory newProposal = ProposalDetails({
             id: nextProposalId,
             themeId: _themeId,
@@ -69,56 +75,94 @@ contract Proposal {
             amount: _amount,
             balance: 0,
             beneficiary: _beneficiary,
-            executed: false
+            executed: false,
+            creationTime: block.timestamp
         });
 
+        //Store a new proposal for easier retrieval with the themeId and proposal ID.
         proposals[nextProposalId] = newProposal;
         proposalsByTheme[_themeId].push(nextProposalId);
 
         emit ProposalCreated(nextProposalId, _themeId, _title, _description, _amount, _beneficiary);
         nextProposalId++;
-
-        return nextProposalId - 1; // Return the ID of the newly created proposal
     }
 
-    /// @dev 
-    /// @param _proposalId xx
+    /// @dev The fund will be held in the smart contract until it is withdrawn.
+    /// @param _proposalId The ID of the proposal.
     function deposit(uint256 _proposalId) external payable {
-        ProposalDetails storage proposal = proposals[_proposalId];
+        ProposalDetails storage proposal = proposals[_proposalId]; //Declares a storage reference.
         require(!proposal.executed, "Proposal already executed");
         require(msg.value > 0, "Must send some ether");
+        require(block.timestamp < proposal.creationTime + DURATION, "Deposit period has ended");
 
         proposal.balance += msg.value;
         emit FundsDeposited(_proposalId, msg.sender, msg.value);
     }
 
-    /// @dev Will give the amount gained to the beneficiary
-    /// @param _proposalId  xx
-    function execute(uint256 _proposalId) external {
-        ProposalDetails storage proposal = proposals[_proposalId];
-        require(msg.sender == owner, "Only owner can execute");
-        require(!proposal.executed, "Proposal already executed");
-        require(proposal.balance >= proposal.amount, "Insufficient balance to execute");
+    /// @dev The fund will be held in the smart contract until it is withdrawn.
+    /// @param _proposalId The ID of the proposal.
+    function withdraw(uint256 _proposalId) external {
+        ProposalDetails storage proposal = proposals[_proposalId]; //Declares a storage reference.
+        require(proposal.balance > 0, "No funds to withdraw");
+        require(msg.sender == owner || msg.sender == proposal.beneficiary, "Not authorized to withdraw");
+        require(block.timestamp >= proposal.creationTime + DURATION, "Proposal duration has not passed yet");
 
+        uint256 amount = proposal.balance;
+        proposal.balance = 0;
+        // Use call for transferring funds.
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success, "Withdrawal failed");
+
+        emit FundsWithdrawn(_proposalId, msg.sender, amount);
+
+        // Mark the proposal as executed once the funds are withdrawn.
         proposal.executed = true;
-        payable(proposal.beneficiary).transfer(proposal.amount);
-        proposal.balance -= proposal.amount;
-
-        emit ProposalExecuted(_proposalId);
     }
 
+    /// @dev Gets the proposal
+    /// @param _proposalId The proposal ID.
+    /// @return The ProposalDetails
     function getProposal(uint256 _proposalId) external view returns (ProposalDetails memory) {
         return proposals[_proposalId];
     }
 
+    /// @dev Gets the proposal by their theme
+    /// @param _themeId The theme ID.
+    /// @return The proposal Detail by their theme
     function getProposalsByTheme(uint256 _themeId) external view returns (ProposalDetails[] memory) {
-        uint256[] memory proposalIds = proposalsByTheme[_themeId];
+        uint256[] storage proposalIds = proposalsByTheme[_themeId]; //Accesses the mapping proposalByTheme
         ProposalDetails[] memory result = new ProposalDetails[](proposalIds.length);
-
+        
         for (uint256 i = 0; i < proposalIds.length; i++) {
             result[i] = proposals[proposalIds[i]];
         }
-
         return result;
+    }
+
+    /// @dev To know the status of the proposal
+    /// @param _proposalId The proposal's ID
+    function getProposalStatus(uint256 _proposalId) external view returns (bool executed, bool expired) {
+        ProposalDetails storage proposal = proposals[_proposalId];
+        bool isExpired = block.timestamp >= proposal.creationTime + DURATION;
+        return (proposal.executed, isExpired);
+    }
+
+    /// @dev To delete the proposal before voting begin (Not Now)
+    /// @param _proposalId The proposal ID.
+    function deleteProposal(uint256 _proposalId) external {
+        ProposalDetails storage proposal = proposals[_proposalId];
+        require(msg.sender == owner, "Only owner can delete proposal");
+        require(!proposal.executed, "Cannot delete executed proposal");
+        delete proposals[_proposalId];
+        
+        uint256[] storage themeProposals = proposalsByTheme[proposal.themeId];
+        for (uint256 i = 0; i < themeProposals.length; i++) {
+            if (themeProposals[i] == _proposalId) {
+                themeProposals[i] = themeProposals[themeProposals.length - 1];
+                themeProposals.pop();
+                break;
+            }
+        }
+        emit ProposalDeleted(_proposalId);
     }
 }
