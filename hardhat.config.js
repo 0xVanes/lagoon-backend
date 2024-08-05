@@ -12,9 +12,5 @@ module.exports = {
       url: "https://rpc.eth.testedge2.haqq.network", 
       accounts: [`0x${PRIVATE_KEY}`] 
     },
-    haqqmainnet: {
-      url: "https://rpc.eth.haqq.network", 
-      accounts: [`0x${PRIVATE_KEY}`] 
-    },
    },
 };

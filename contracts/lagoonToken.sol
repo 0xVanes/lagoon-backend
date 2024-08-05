@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 * @notice This contract implements a token given for every waqf donation that they give
 **/
 
-contract lagoonToken is ERC20, ERC20Permit, Ownable {
+contract LagoonToken is ERC20, ERC20Permit, Ownable {
 
     /* State Variables */
     uint256 public constant REGULAR_TOKEN_AMOUNT = 10 * 10 ** 18; // 10 tokens given for regular

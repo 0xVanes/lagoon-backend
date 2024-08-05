@@ -17,7 +17,7 @@ contract Proposal {
     uint256 private constant DURATION = 30 days; // The duration of the proposal
 
     lgnNft private nftContract;
-    lagoonToken private tokenContract;
+    LagoonToken private tokenContract;
 
     // Struct to store proposal details
     struct ProposalDetails {
@@ -56,7 +56,7 @@ contract Proposal {
         nextThemeId = 1; // Start theme IDs from 1.
         nextProposalId = 1; // Start proposal IDs from 1.
         nftContract = lgnNft(_nftContractAddress);
-        tokenContract = lagoonToken(_tokenContractAddress);
+        tokenContract = LagoonToken(_tokenContractAddress);
     }
 
     /// @dev Initializes the creation of new theme.
