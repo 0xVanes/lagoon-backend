@@ -4,33 +4,29 @@ pragma solidity ^0.8.19;
 
 /**
 * @title LagoonNft - A contract that distributes Lagoon Nft 
-* @notice This contract implements a nft given for every waqf donation that they give
-*/
+* @notice This contract implements an NFT given for every waqf donation that they give
+**/
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
+import "@openzeppelin/contracts/access/Ownable.sol"; // Import Ownable for access control
 
-contract lgnNft is ERC721URIStorage {
+contract lgnNft is ERC721URIStorage, Ownable {
     uint256 private _tokenIds;
-    
+
     string baseSvg = "<svg xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='xMinYMin meet' viewBox='0 0 350 350'><style>.base { fill: white; font-family: serif; font-size: 24px; }</style><rect width='100%' height='100%' fill='black' /><text x='50%' y='50%' class='base' dominant-baseline='middle' text-anchor='middle'>";
 
-    constructor() ERC721("Lagoon", "LGN") {}
+    constructor() ERC721("Lagoon", "LGN") Ownable(msg.sender) {}
 
     /// @dev MintNFT
     /// @param recipient as the NFT receiver
-    /// @param lagoonType a string indicating Regular, Gold and Diamond
+    /// @param lagoonType a string indicating Regular, Gold, and Diamond
     /// @return uint256 return new tokenId
-    function mintNFT(address recipient, string memory lagoonType) public returns (uint256) {
-        require(
-            keccak256(bytes(lagoonType)) == keccak256(bytes("Regular")) ||
-            keccak256(bytes(lagoonType)) == keccak256(bytes("Gold")) ||
-            keccak256(bytes(lagoonType)) == keccak256(bytes("Diamond")),
-            "Invalid Lagoon type"
-        );
+    function mintNFT(address recipient, string memory lagoonType) public onlyOwner returns (uint256) {
+        require(isValidLagoonType(lagoonType), "Invalid Lagoon type");
 
         _tokenIds += 1;
-        uint256 newItemId = _tokenIds; //To get new unique TokenId
+        uint256 newItemId = _tokenIds; // To get new unique TokenId
 
         string memory finalSvg = string(
             abi.encodePacked(baseSvg, lagoonType, "</text></svg>")
@@ -57,11 +53,21 @@ contract lgnNft is ERC721URIStorage {
             abi.encodePacked("data:application/json;base64,", json)
         );
 
-        // Mint the newNFT
+        // Mint the new NFT
         _mint(recipient, newItemId);
         // Set the token URI for the new NFT
         _setTokenURI(newItemId, finalTokenUri);
 
         return newItemId;
+    }
+
+    /// @dev Checks if the lagoon type is valid
+    /// @param lagoonType The type of lagoon
+    /// @return bool indicating validity
+    function isValidLagoonType(string memory lagoonType) internal pure returns (bool) {
+        return 
+            keccak256(bytes(lagoonType)) == keccak256(bytes("Regular")) ||
+            keccak256(bytes(lagoonType)) == keccak256(bytes("Gold")) ||
+            keccak256(bytes(lagoonType)) == keccak256(bytes("Diamond"));
     }
 }

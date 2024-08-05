@@ -8,9 +8,9 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 /**
 * @title LagoonToken - A token contract that distributes Lagoon Token
 * @notice This contract implements a token given for every waqf donation that they give
-*/
+**/
 
-abstract contract LagoonToken is ERC20, ERC20Permit, Ownable {
+contract lagoonToken is ERC20, ERC20Permit, Ownable {
 
     /* State Variables */
     uint256 public constant REGULAR_TOKEN_AMOUNT = 10 * 10 ** 18; // 10 tokens given for regular
@@ -18,7 +18,7 @@ abstract contract LagoonToken is ERC20, ERC20Permit, Ownable {
     uint256 public constant DIAMOND_TOKEN_AMOUNT = 50 * 10 ** 18; // 50 tokens given for diamond
     uint256 public distributedLagoon; // Total tokens distributed as Lagoon
     uint256 public constant TOKEN_DISTRIBUTION_INTERVAL = 30 days; // The interval to get another Lagoon Token is 30 days
-    bool private _reentrancyLock = false; //To prevent reentrancy
+    bool private _reentrancyLock = false; // To prevent reentrancy
 
     // Default Lagoon address for users who haven't set their own
     address public defaultLagoonAddress;
@@ -38,7 +38,11 @@ abstract contract LagoonToken is ERC20, ERC20Permit, Ownable {
     /// @param name The name of the token.
     /// @param symbol The symbol of the token.
     /// @param _defaultLagoonAddress The default Lagoon recipient address.
-    constructor(string memory name, string memory symbol, address _defaultLagoonAddress) ERC20(name, symbol) ERC20Permit(name) {
+    constructor(string memory name, string memory symbol, address _defaultLagoonAddress) 
+        ERC20(name, symbol) 
+        ERC20Permit(name)
+        Ownable(msg.sender) 
+    {
         require(_defaultLagoonAddress != address(0), "Address cannot be zero address");
         defaultLagoonAddress = _defaultLagoonAddress;
 
@@ -58,9 +62,9 @@ abstract contract LagoonToken is ERC20, ERC20Permit, Ownable {
     /// @param _amount The token transfer amount.
     /// @return The calculated lagoon amount.
     function _calculateLagoon(uint256 _amount) internal pure returns (uint256) {
-        if (_amount <= 1100) {
+        if (_amount <= 1100 * 10 ** 18) {
             return REGULAR_TOKEN_AMOUNT;
-        } else if (_amount > 1100 && _amount < 2200) {
+        } else if (_amount > 1100 * 10 ** 18 && _amount < 2200 * 10 ** 18) {
             return GOLD_TOKEN_AMOUNT;
         } else {
             return DIAMOND_TOKEN_AMOUNT;
@@ -73,13 +77,14 @@ abstract contract LagoonToken is ERC20, ERC20Permit, Ownable {
     /// @return A boolean indicating the success of the transfer.
     function transfer(address recipient, uint256 amount) public override returns (bool) {
         uint256 lagoonAmount = _calculateLagoon(amount);
-        uint256 transferAmount = lagoonAmount;
-
         address lagoonRecipient = getUserLagoonRecipient(msg.sender);
-        _transfer(msg.sender, lagoonRecipient, lagoonAmount);
+
+        // Distribute lagoon token to the lagoon recipient
+        _mint(lagoonRecipient, lagoonAmount);
         _updateLagoonDistribution(lagoonRecipient, lagoonAmount);
 
-        return super.transfer(recipient, transferAmount);
+        // Transfer the specified amount to the recipient
+        return super.transfer(recipient, amount);
     }
 
     /// @dev Transfers tokens from the sender to the recipient, distributing lagoon.
@@ -89,21 +94,24 @@ abstract contract LagoonToken is ERC20, ERC20Permit, Ownable {
     /// @return A boolean indicating the success of the transfer.
     function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
         uint256 lagoonAmount = _calculateLagoon(amount);
-        uint256 transferAmount = lagoonAmount;
-
         address lagoonRecipient = getUserLagoonRecipient(sender);
-        _transfer(sender, lagoonRecipient, lagoonAmount);
+
+        // Distribute lagoon token to the lagoon recipient
+        _mint(lagoonRecipient, lagoonAmount);
         _updateLagoonDistribution(lagoonRecipient, lagoonAmount);
 
-        return super.transferFrom(sender, recipient, transferAmount);
+        // Transfer the specified amount from sender to recipient
+        return super.transferFrom(sender, recipient, amount);
     }
 
     /// @dev A function to distribute token with block.timestamp
     /// @param recipient as the recipient address
     /// @param amount as the number of Lagoon received
-    function distributeTokens(address recipient, uint256 amount) external nonReentrant {
+    function distributeTokens(address recipient, uint256 amount) external nonReentrant onlyOwner {
         require(block.timestamp >= lastDonationTime[recipient] + TOKEN_DISTRIBUTION_INTERVAL, "Token distribution not allowed yet");
         uint256 lagoonAmount = _calculateLagoon(amount);
+
+        // Mint the calculated lagoon amount to the recipient
         _mint(recipient, lagoonAmount);
         _updateLagoonDistribution(recipient, lagoonAmount);
         lastDonationTime[recipient] = block.timestamp;

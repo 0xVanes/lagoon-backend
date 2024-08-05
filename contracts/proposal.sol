@@ -4,7 +4,10 @@ pragma solidity ^0.8.19;
 /**
 * @title Proposal - A contract to make donation proposals and to donate to beneficiary
 * @notice This contract prepares the proposals and handle giving the raised money to the beneficiary directly
-*/
+**/
+
+import "./lgnNft.sol";
+import "./lagoonToken.sol";
 
 contract Proposal {
     /* State Variables */
@@ -12,6 +15,9 @@ contract Proposal {
     uint256 private nextThemeId; //Currently the theme is about Mosque, this is to add more donation themes
     uint256 private nextProposalId; //The ID number of the proposal
     uint256 private constant DURATION = 30 days; // The duration of the proposal
+
+    lgnNft private nftContract;
+    lagoonToken private tokenContract;
 
     // Struct to store proposal details
     struct ProposalDetails {
@@ -35,6 +41,9 @@ contract Proposal {
     // proposal theme ID to proposal ID
     mapping(uint256 => uint256[]) private proposalsByTheme;
 
+    // Mapping for last token distribution time
+    mapping(address => uint256) private lastDistributionTime;
+
     /* Events */
     event ThemeCreated(uint256 themeId, string themeName);
     event ProposalCreated(uint256 proposalId, uint256 themeId, string title, string description, uint256 amount, address beneficiary);
@@ -42,10 +51,12 @@ contract Proposal {
     event FundsWithdrawn(uint256 proposalId, address withdrawer, uint256 amount);
     event ProposalDeleted(uint256 proposalId);
 
-    constructor() {
+    constructor(address _nftContractAddress, address _tokenContractAddress) {
         owner = msg.sender;
         nextThemeId = 1; // Start theme IDs from 1.
         nextProposalId = 1; // Start proposal IDs from 1.
+        nftContract = lgnNft(_nftContractAddress);
+        tokenContract = lagoonToken(_tokenContractAddress);
     }
 
     /// @dev Initializes the creation of new theme.
@@ -97,6 +108,37 @@ contract Proposal {
 
         proposal.balance += msg.value;
         emit FundsDeposited(_proposalId, msg.sender, msg.value);
+        distributeRewards(msg.sender, msg.value);
+    }
+
+    /// @dev Distributes NFT and tokens to the user.
+    /// @param donor The address of the donor.
+    /// @param amount The donation amount.
+    function distributeRewards(address donor, uint256 amount) internal {
+        // Determine the lagoon type based on the amount
+        string memory lagoonType = getLagoonType(amount);
+
+        // Check if token distribution is allowed
+        if (block.timestamp >= lastDistributionTime[donor] + 30 days) {
+            // Mint NFT to the donor
+            nftContract.mintNFT(donor, lagoonType);
+            // Distribute tokens to the donor
+            tokenContract.distributeTokens(donor, amount);
+            lastDistributionTime[donor] = block.timestamp;
+        }
+    }
+
+    /// @dev Determines the lagoon type based on the donation amount.
+    /// @param amount The donation amount.
+    /// @return The lagoon type as a string.
+    function getLagoonType(uint256 amount) internal pure returns (string memory) {
+        if (amount <= 1100 * 10 ** 18) {
+            return "Regular";
+        } else if (amount > 1100 * 10 ** 18 && amount < 2200 * 10 ** 18) {
+            return "Gold";
+        } else {
+            return "Diamond";
+        }
     }
 
     /// @dev The fund will be held in the smart contract until it is withdrawn.
