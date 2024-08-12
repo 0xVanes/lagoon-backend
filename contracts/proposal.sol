@@ -12,7 +12,7 @@ import "./lagoonToken.sol";
 contract Proposal {
     /* State Variables */
     address public owner; // Owner is the one who deploys the contract
-    uint256 private constant DURATION = 30 days; // The duration of the proposal
+    uint256 public constant DURATION = 30 days; // The duration of the proposal
     uint256 private nextProposalId; // To track the next proposal ID
 
     lgnNft private nftContract;
@@ -30,8 +30,18 @@ contract Proposal {
         uint256 creationTime; // Timestamp when the proposal was created
     }
 
+    // Struct to see the list of Donors
+    struct Donor {
+        address walletAddress;
+        uint256 amount;
+        uint256 time;
+    }
+
     // proposal ID to proposal details
     mapping(uint256 => ProposalDetails) private proposals;
+
+    //proposal ID to Donors
+    mapping(uint256 => Donor[]) private proposalDonors;
 
     // Mapping for last token distribution time
     mapping(address => uint256) private lastDistributionTime;
@@ -40,9 +50,7 @@ contract Proposal {
     event ProposalCreated(uint256 proposalId, string title, string description, uint256 amount, address beneficiary);
     event FundsDonated(uint256 proposalId, address donor, uint256 amount);
     event FundsWithdrawn(uint256 proposalId, address withdrawer, uint256 amount);
-    event ProposalDeleted(uint256 proposalId);
-    event Debug(string message);
-
+    
     constructor(address _nftContractAddress, address _tokenContractAddress) {
         owner = msg.sender;
         nftContract = lgnNft(_nftContractAddress);
@@ -80,22 +88,23 @@ contract Proposal {
     /// @dev The fund will be held in the smart contract until it is withdrawn.
     /// @param _proposalId The ID of the proposal.
     function donate(uint256 _proposalId) external payable {
-        emit Debug("Checking proposal ID validity"); // Debug event
         require(_proposalId > 0 && _proposalId < nextProposalId, "Invalid proposal ID");
     
         ProposalDetails storage proposal = proposals[_proposalId];
-        emit Debug("Checking if proposal is executed"); // Debug event
         require(!proposal.executed, "Proposal already executed");
-
-        emit Debug("Checking donation amount"); // Debug event
         require(msg.value > 0, "Must send some ether");
-
-        emit Debug("Checking proposal duration"); // Debug event
         require(block.timestamp < proposal.creationTime + DURATION, "Deposit period has ended");
 
         proposal.balance += msg.value;
+
+        // Store the donor's information
+        Donor memory newDonor = Donor({
+            walletAddress: msg.sender, amount: msg.value, time: block.timestamp
+        });
+        proposalDonors[_proposalId].push(newDonor);
+
         emit FundsDonated(_proposalId, msg.sender, msg.value);
-        distributeRewards(msg.sender, msg.value);
+        //distributeRewards(msg.sender, msg.value);
     }
 
     /// @dev Distributes NFT and tokens to the user.
@@ -148,6 +157,27 @@ contract Proposal {
 
         // Mark the proposal as executed once the funds are withdrawn.
         proposal.executed = true;
+    }
+
+    /// @dev To count how many donors donated
+    /// @param _proposalId The proposal ID
+    /// @return number of proposal's donor
+    function getDonorCount(uint256 _proposalId) external view returns (uint256) {
+        return proposalDonors[_proposalId].length;
+    }
+
+    /// @dev Gets the donor
+    /// @param _proposalId The proposal ID
+    function getDonors(uint256 _proposalId) external view returns (Donor[] memory) {
+    return proposalDonors[_proposalId];
+}
+
+    /// @dev Returns the raised amount for a specific proposal.
+    /// @param _proposalId The proposal ID.
+    /// @return The raised amount in the proposal.
+    function getRaisedAmount(uint256 _proposalId) external view returns (uint256) {
+        require(proposals[_proposalId].id != 0, "Invalid proposal ID"); // Check if proposal exists
+        return proposals[_proposalId].balance;
     }
 
     /// @dev Gets the proposal.

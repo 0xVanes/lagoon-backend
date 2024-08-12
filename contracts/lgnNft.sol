@@ -22,7 +22,7 @@ contract lgnNft is ERC721URIStorage, Ownable {
     /// @param recipient as the NFT receiver
     /// @param lagoonType a string indicating Regular, Gold, and Diamond
     /// @return uint256 return new tokenId
-    function mintNFT(address recipient, string memory lagoonType) public onlyOwner returns (uint256) {
+    function mintNFT(address recipient, string memory lagoonType) public returns (uint256) {
         require(isValidLagoonType(lagoonType), "Invalid Lagoon type");
 
         _tokenIds += 1;
