@@ -30,6 +30,7 @@ contract Proposal {
     event FundsDeposited(uint256 proposalId, address donor, uint256 amount);
     event FundsWithdrawn(uint256 proposalId, address withdrawer, uint256 amount);
     event ProposalDeleted(uint256 proposalId);
+    event DonationMade(address donor, uint256 amount);
 
     constructor() {
         owner = msg.sender;
@@ -39,9 +40,8 @@ contract Proposal {
 
     function createTheme(string memory _themeName) external {
         require(msg.sender == owner, "Only owner can create themes");
-        themes[nextThemeId] = _themeName;
-        emit ThemeCreated(nextThemeId, _themeName);
-        nextThemeId++;
+        themes[nextThemeId++] = _themeName;
+        emit ThemeCreated(nextThemeId - 1, _themeName);
     }
 
     function createProposal(
@@ -53,25 +53,21 @@ contract Proposal {
     ) external returns (uint256) {
         require(bytes(themes[_themeId]).length > 0, "Theme does not exist");
 
-        ProposalDetails memory newProposal = ProposalDetails({
-            id: nextProposalId,
-            themeId: _themeId,
-            title: _title,
-            description: _description,
-            amount: _amount,
-            balance: 0,
-            beneficiary: _beneficiary,
-            executed: false,
-            creationTime: block.timestamp
-        });
+        ProposalDetails storage newProposal = proposals[nextProposalId];
+        newProposal.id = nextProposalId;
+        newProposal.themeId = _themeId;
+        newProposal.title = _title;
+        newProposal.description = _description;
+        newProposal.amount = _amount;
+        newProposal.balance = 0;
+        newProposal.beneficiary = _beneficiary;
+        newProposal.executed = false;
+        newProposal.creationTime = block.timestamp;
 
-        proposals[nextProposalId] = newProposal;
         proposalsByTheme[_themeId].push(nextProposalId);
-
         emit ProposalCreated(nextProposalId, _themeId, _title, _description, _amount, _beneficiary);
-        nextProposalId++;
 
-        return nextProposalId - 1; // Return the ID of the newly created proposal
+        return nextProposalId++;
     }
 
     function deposit(uint256 _proposalId) external payable {
@@ -93,14 +89,19 @@ contract Proposal {
         uint256 amount = proposal.balance;
         proposal.balance = 0;
 
-        // Use call for transferring funds
         (bool success, ) = msg.sender.call{value: amount}("");
         require(success, "Withdrawal failed");
 
         emit FundsWithdrawn(_proposalId, msg.sender, amount);
-
-        // Mark the proposal as executed once the funds are withdrawn
         proposal.executed = true;
+    }
+
+    function donate() external payable {
+        require(msg.value > 0, "Must send some ether");
+        (bool success, ) = owner.call{value: msg.value}("");
+        require(success, "Donation failed");
+
+        emit DonationMade(msg.sender, msg.value);
     }
 
     function getProposal(uint256 _proposalId) external view returns (ProposalDetails memory) {
@@ -120,15 +121,9 @@ contract Proposal {
 
     function getProposalStatus(uint256 _proposalId) external view returns (bool executed, bool expired) {
         ProposalDetails storage proposal = proposals[_proposalId];
-        bool isExpired = block.timestamp >= proposal.creationTime + DURATION;
-        return (proposal.executed, isExpired);
+        return (proposal.executed, block.timestamp >= proposal.creationTime + DURATION);
     }
-    function Deposit(uint256 _amount) external {
-        require(msg.value > 0, "Amount has to be greater than 0"),
-        (bool success, )owner.call{value : amount}("");
-        require(success, "Donate Failed");
-    }
-
+    
     function deleteProposal(uint256 _proposalId) external {
         ProposalDetails storage proposal = proposals[_proposalId];
         require(msg.sender == owner, "Only owner can delete proposal");
