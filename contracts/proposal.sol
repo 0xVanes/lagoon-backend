@@ -3,7 +3,7 @@ pragma solidity ^0.8.19;
 
 /**
 * @title Proposal - A contract to make donation proposals and to donate to beneficiary
-* @notice This contract prepares the proposals and handle giving the raised money to the beneficiary directly
+* @notice This contract prepares the proposals and handles giving the raised money to the beneficiary directly
 **/
 
 import "./lgnNft.sol";
@@ -12,8 +12,9 @@ import "./lagoonToken.sol";
 contract Proposal {
     /* State Variables */
     address public owner; // Owner is the one who deploys the contract
-    uint256 public constant DURATION = 30 days; // The duration of the proposal
+    uint256 public constant DURATION = 30 days; // The duration of the donation period
     uint256 private nextProposalId; // To track the next proposal ID
+    uint256 public constant FEE_PERCENTAGE = 25; // 2.5% fee (2.5 * 10^1)
 
     lgnNft private nftContract;
     LagoonToken private tokenContract;
@@ -28,6 +29,7 @@ contract Proposal {
         address beneficiary;
         bool executed;
         uint256 creationTime; // Timestamp when the proposal was created
+        bool approvedForDonations; // Flag to check if the proposal is approved for donations
     }
 
     // Struct to see the list of Donors
@@ -37,10 +39,10 @@ contract Proposal {
         uint256 time;
     }
 
-    // proposal ID to proposal details
+    // Mapping for proposal ID to proposal details
     mapping(uint256 => ProposalDetails) private proposals;
 
-    //proposal ID to Donors
+    // Mapping for proposal ID to Donors
     mapping(uint256 => Donor[]) private proposalDonors;
 
     // Mapping for last token distribution time
@@ -50,7 +52,8 @@ contract Proposal {
     event ProposalCreated(uint256 proposalId, string title, string description, uint256 amount, address beneficiary);
     event FundsDonated(uint256 proposalId, address donor, uint256 amount);
     event FundsWithdrawn(uint256 proposalId, address withdrawer, uint256 amount);
-    
+    event ProposalApprovedForDonations(uint256 proposalId);
+
     constructor(address _nftContractAddress, address _tokenContractAddress) {
         owner = msg.sender;
         nftContract = lgnNft(_nftContractAddress);
@@ -63,9 +66,8 @@ contract Proposal {
     /// @param _description The description of the proposal.
     /// @param _amount The goal in ISLM of the donation.
     /// @param _beneficiary The address of the beneficiary.
-    function createProposal(string memory _title, string memory _description, uint256 _amount, address _beneficiary) external {
+    function createProposal(string memory _title, string memory _description, uint256 _amount, address _beneficiary) external payable {
         require(_amount > 0, "Amount should be greater than 0");
-        
         // Insert all the information needed on a newProposal.
         ProposalDetails memory newProposal = ProposalDetails({
             id: nextProposalId,
@@ -75,7 +77,8 @@ contract Proposal {
             balance: 0,
             beneficiary: _beneficiary,
             executed: false,
-            creationTime: block.timestamp
+            creationTime: block.timestamp,
+            approvedForDonations: false
         });
 
         // Store the new proposal
@@ -85,45 +88,42 @@ contract Proposal {
         nextProposalId++;
     }
 
-    /// @dev The fund will be held in the smart contract until it is withdrawn.
-    /// @param _proposalId The ID of the proposal.
+    function approveProposalForDonations(uint256 _proposalId) external {
+        require(_proposalId > 0 && _proposalId < nextProposalId, "Invalid proposal ID");
+        ProposalDetails storage proposal = proposals[_proposalId];
+        //require(block.timestamp >= proposal.creationTime + 7 days, "Voting period not ended");
+        require(!proposal.approvedForDonations, "Proposal already approved for donations");
+        proposal.approvedForDonations = true;
+
+        emit ProposalApprovedForDonations(_proposalId);
+    }
+
     function donate(uint256 _proposalId) external payable {
         require(_proposalId > 0 && _proposalId < nextProposalId, "Invalid proposal ID");
-    
+
         ProposalDetails storage proposal = proposals[_proposalId];
         require(!proposal.executed, "Proposal already executed");
         require(msg.value > 0, "Must send some ether");
-        require(block.timestamp < proposal.creationTime + DURATION, "Deposit period has ended");
+        //require(proposal.approvedForDonations, "Proposal not approved for donations");
+        require(block.timestamp < proposal.creationTime + DURATION, "Donation period has ended");
 
-        proposal.balance += msg.value;
+        // Calculate and transfer the fee
+        uint256 fee = (msg.value * FEE_PERCENTAGE) / 1000;
+        uint256 donationAmount = msg.value - fee;
+        payable(owner).transfer(fee);
+
+        proposal.balance += donationAmount;
 
         // Store the donor's information
         Donor memory newDonor = Donor({
-            walletAddress: msg.sender, amount: msg.value, time: block.timestamp
+            walletAddress: msg.sender,
+            amount: donationAmount,
+            time: block.timestamp
         });
         proposalDonors[_proposalId].push(newDonor);
 
-        emit FundsDonated(_proposalId, msg.sender, msg.value);
-        //distributeRewards(msg.sender, msg.value);
+        emit FundsDonated(_proposalId, msg.sender, donationAmount);
     }
-
-    /// @dev Distributes NFT and tokens to the user.
-    /// @param donor The address of the donor.
-    /// @param amount The donation amount.
-    function distributeRewards(address donor, uint256 amount) internal {
-        // Determine the lagoon type based on the amount
-        string memory lagoonType = getLagoonType(amount);
-
-        // Check if token distribution is allowed
-        if (block.timestamp >= lastDistributionTime[donor] + 30 days) {
-            // Mint NFT to the donor
-            nftContract.mintNFT(donor, lagoonType);
-            // Distribute tokens to the donor
-            tokenContract.distributeTokens(donor, amount);
-            lastDistributionTime[donor] = block.timestamp;
-        }
-    }
-
     /// @dev Determines the lagoon type based on the donation amount.
     /// @param amount The donation amount.
     /// @return The lagoon type as a string.
@@ -145,15 +145,21 @@ contract Proposal {
         ProposalDetails storage proposal = proposals[_proposalId]; // Declares a storage reference.
         require(proposal.balance > 0, "No funds to withdraw");
         require(msg.sender == owner || msg.sender == proposal.beneficiary, "Not authorized to withdraw");
-        require(block.timestamp >= proposal.creationTime + DURATION, "Proposal duration has not passed yet");
+        //require(block.timestamp >= proposal.creationTime + DURATION, "Proposal duration has not passed yet");
 
         uint256 amount = proposal.balance;
+        uint256 fee = (amount * FEE_PERCENTAGE) / 1000;
+        uint256 withdrawAmount = amount - fee;
         proposal.balance = 0;
+
         // Use call for transferring funds.
-        (bool success, ) = msg.sender.call{value: amount}("");
+        (bool success, ) = payable(owner).call{value: fee}("");
+        require(success, "Fee transfer failed");
+
+        (success, ) = payable(msg.sender).call{value: withdrawAmount}("");
         require(success, "Withdrawal failed");
 
-        emit FundsWithdrawn(_proposalId, msg.sender, amount);
+        emit FundsWithdrawn(_proposalId, msg.sender, withdrawAmount);
 
         // Mark the proposal as executed once the funds are withdrawn.
         proposal.executed = true;

@@ -6,7 +6,7 @@ async function main() {
 
   // Deploy LagoonToken
   const LagoonToken = await hre.ethers.getContractFactory("LagoonToken");
-  const lagoonToken = await LagoonToken.deploy("Lagoon", "LGN", deployer.address);
+  const lagoonToken = await LagoonToken.deploy("LagoonToken", "LGN", deployer.address);
   await lagoonToken.waitForDeployment(); 
   console.log("LagoonToken deployed to:", await lagoonToken.getAddress());
 
@@ -31,18 +31,17 @@ async function main() {
   // Deploy Voting
   console.log("Deploying Voting...");
   const Voting = await hre.ethers.getContractFactory("Voting");
-  const voting = await Voting.deploy(proposalContractAddress); 
+  const voting = await Voting.deploy(proposalContractAddress);
+  //const voting = await Voting.deploy(proposalContractAddress, await lagoonToken.getAddress()); 
   await voting.waitForDeployment();
   console.log("Voting contract deployed to:", await voting.getAddress());
 
-  // Deploy AssetTokenization
-  console.log("Deploying realEstateWaqfToken...");
-  const { ethers } = hre;
-  const RealEstateWaqfToken = await hre.ethers.getContractFactory("RealEstateWaqfToken");
-  const initialSupply = ethers.utils.parseEther("1000000"); // 1 million tokens
-  const token = await RealEstateWaqfToken.deploy("A Stable Token", "AST", initialSupply);
-
-  console.log("RealEstateWaqfToken deployed to:", token.address);
+  // Deploy RealEstateAssetTokenization
+  console.log("Deploying realEstateAssetTokenization...");
+  const RealEstateAssetTokenization = await hre.ethers.getContractFactory("realEstateAssetTokenization");
+  const realEstateAssetTokenization = await RealEstateAssetTokenization.deploy(deployer.address);
+  await realEstateAssetTokenization.waitForDeployment();
+  console.log("RealEstateAssetTokenization deployed to:", await realEstateAssetTokenization.getAddress());
 }
 
 main().catch((error) => {

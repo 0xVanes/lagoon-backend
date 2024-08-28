@@ -1,73 +1,77 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity ^0.8.19;
-
 /**
 * @title LagoonNft - A contract that distributes Lagoon Nft 
 * @notice This contract implements an NFT given for every waqf donation that they give
 **/
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
-import "@openzeppelin/contracts/utils/Base64.sol";
-import "@openzeppelin/contracts/access/Ownable.sol"; // Import Ownable for access control
+contract lgnNft is ERC721Enumerable, Ownable {
+    uint256 private nextTokenId;
+    mapping(uint256 => string) private tokenURIs;
+    
+    string[] private regularURIs;
+    string[] private goldURIs;
+    string[] private diamondURIs;
 
-contract lgnNft is ERC721URIStorage, Ownable {
-    uint256 private _tokenIds;
+    constructor() ERC721("LagoonNFT", "LGN") Ownable(msg.sender) {
+        nextTokenId = 1;
 
-    string baseSvg = "<svg xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='xMinYMin meet' viewBox='0 0 350 350'><style>.base { fill: white; font-family: serif; font-size: 24px; }</style><rect width='100%' height='100%' fill='black' /><text x='50%' y='50%' class='base' dominant-baseline='middle' text-anchor='middle'>";
-
-    constructor() ERC721("Lagoon", "LGN") Ownable(msg.sender) {}
-
-    /// @dev MintNFT
-    /// @param recipient as the NFT receiver
-    /// @param lagoonType a string indicating Regular, Gold, and Diamond
-    /// @return uint256 return new tokenId
-    function mintNFT(address recipient, string memory lagoonType) public returns (uint256) {
-        require(isValidLagoonType(lagoonType), "Invalid Lagoon type");
-
-        _tokenIds += 1;
-        uint256 newItemId = _tokenIds; // To get new unique TokenId
-
-        string memory finalSvg = string(
-            abi.encodePacked(baseSvg, lagoonType, "</text></svg>")
-        );
-
-        // Generate JSON metadata and base64 encode it
-        string memory json = Base64.encode(
-            bytes(
-                string(
-                    abi.encodePacked(
-                        '{"name": "', lagoonType,
-                        ' Lagoon", "description": "On-chain Lagoon NFTs", "attributes": [{"trait_type": "Type", "value": "',
-                        lagoonType,
-                        '"}], "image": "data:image/svg+xml;base64,',
-                        Base64.encode(bytes(finalSvg)),
-                        '"}'
-                    )
-                )
-            )
-        );
-
-        // Construct the token URI
-        string memory finalTokenUri = string(
-            abi.encodePacked("data:application/json;base64,", json)
-        );
-
-        // Mint the new NFT
-        _mint(recipient, newItemId);
-        // Set the token URI for the new NFT
-        _setTokenURI(newItemId, finalTokenUri);
-
-        return newItemId;
+        // Initialize the URI arrays
+        regularURIs = ["https://example.com/metadata/regular1.json", "https://example.com/metadata/regular2.json" /*... add more NFTs*/];
+        goldURIs = ["https://example.com/metadata/gold1.json", "https://example.com/metadata/gold2.json" /*... add more NFTs*/];
+        diamondURIs = ["https://example.com/metadata/diamond1.json", "https://example.com/metadata/diamond2.json" /*... add more NFTs*/];
     }
 
-    /// @dev Checks if the lagoon type is valid
-    /// @param lagoonType The type of lagoon
-    /// @return bool indicating validity
-    function isValidLagoonType(string memory lagoonType) internal pure returns (bool) {
-        return 
-            keccak256(bytes(lagoonType)) == keccak256(bytes("Regular")) ||
-            keccak256(bytes(lagoonType)) == keccak256(bytes("Gold")) ||
-            keccak256(bytes(lagoonType)) == keccak256(bytes("Diamond"));
+    /// @dev Mint a new NFT with a trait based on the donation amount
+    /// @param to The address of the recipient
+    /// @param amount The donation amount
+    function mintNFT(address to, uint256 amount) external onlyOwner {
+        uint256 tokenId = nextTokenId;
+        nextTokenId++;
+
+        // Assign a trait based on the donation amount with some randomness
+        string memory uri = getURIByAmount(amount);
+
+        // Set the token URI based on the randomly selected URI
+        tokenURIs[tokenId] = uri;
+
+        _mint(to, tokenId);
+        _setTokenURI(tokenId, uri);
+    }
+
+    /// @dev Returns a random URI based on the donation amount and corresponding trait
+    /// @param amount The donation amount
+    /// @return The URI as a string
+    function getURIByAmount(uint256 amount) internal view returns (string memory) {
+        uint256 random = uint256(keccak256(abi.encodePacked(block.timestamp, block.prevrandao, msg.sender)));
+
+        if (amount <= 1100 * 10 ** 18) {
+            return regularURIs[random % regularURIs.length];
+        } else if (amount > 1100 * 10 ** 18 && amount <= 2200 * 10 ** 18) {
+            return goldURIs[random % goldURIs.length];
+        } else {
+            return diamondURIs[random % diamondURIs.length];
+        }
+    }
+
+    /// @dev Set the token URI for a given token
+    /// @param tokenId The ID of the token
+    /// @param _tokenURI The URI to assign
+    function _setTokenURI(uint256 tokenId, string memory _tokenURI) internal {
+        tokenURIs[tokenId] = _tokenURI;
+    }
+
+    /// @dev Get the token URI for a given token
+    /// @param tokenId The ID of the token
+    /// @return The token URI
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        return tokenURIs[tokenId];
+    }
+
+    /// @dev See {IERC165-supportsInterface}.
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721Enumerable) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 }

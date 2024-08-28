@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
-
 /**
 * @title Voting - A voting mechanism to vote before the proposal is listed on the list for donations
 * @notice This contract implements a voting mechanism before the proposal is ready to be donated
 **/
 
 import "./proposal.sol";
+//import "./lagoonToken.sol";
 
 contract Voting {
     /* State Variables */
     Proposal public proposalContract;
-    
+    //LagoonToken public lagoonToken;
+
     // Struct to store vote
     struct Vote {
         bool support; // true = votesFor and false = votesAgainst
@@ -35,6 +36,7 @@ contract Voting {
 
     constructor(address _proposalContractAddress) {
         proposalContract = Proposal(_proposalContractAddress);
+        //lagoonToken = LagoonToken(_lagoonTokenAddress);
     }
 
     modifier proposalExists(uint256 proposalId) {
@@ -47,35 +49,49 @@ contract Voting {
     /// @param proposalId The proposal's ID
     /// @param support If chooses to vote for
     function vote(uint256 proposalId, bool support) external proposalExists(proposalId) {
-        ProposalVote storage proposalVote = proposalVotes[proposalId];
-        require(!proposalVote.executed, "Proposal already executed");
+    ProposalVote storage proposalVote = proposalVotes[proposalId];
+    require(!proposalVote.executed, "Proposal already executed");
 
-        Proposal.ProposalDetails memory proposalDetails = proposalContract.getProposal(proposalId);
-        require(block.timestamp < proposalDetails.creationTime + proposalContract.DURATION(), "Voting period has ended");
-        require(!proposalVote.hasVoted[msg.sender], "You have already voted on this proposal");
+    Proposal.ProposalDetails memory proposalDetails = proposalContract.getProposal(proposalId);
+    //require(block.timestamp <= proposalDetails.creationTime + 7 days, "Voting period has ended");
+    require(!proposalVote.hasVoted[msg.sender], "You have already voted on this proposal");
 
-        proposalVote.hasVoted[msg.sender] = true;
+    //uint256 lagoonBalance = lagoonToken.balanceOf(msg.sender);
+    //require(lagoonBalance > 0, "Insufficient Lagoon tokens to vote");
 
-        if (support) {
-            proposalVote.votesFor++;
-        } else {
-            proposalVote.votesAgainst++;
-        }
+    // Calculate the 10% of Lagoon tokens
+    //uint256 lagoonToBurn = lagoonBalance / 10;
 
-        emit Voted(proposalId, msg.sender, support);
+    // Burn 10% of Lagoon tokens from the voter's balance
+    //lagoonToken.burn(msg.sender, lagoonToBurn);
+
+    proposalVote.hasVoted[msg.sender] = true;
+
+    if (support) {
+        proposalVote.votesFor++;
+    } else {
+        proposalVote.votesAgainst++;
     }
 
-    /// @dev To execute the proposal
+    emit Voted(proposalId, msg.sender, support);
+    }
+
+
+    /// @dev Executes the proposal after the voting period ends.
     /// @param proposalId The proposal's ID
     function executeProposal(uint256 proposalId) external proposalExists(proposalId) {
         ProposalVote storage proposalVote = proposalVotes[proposalId];
         require(!proposalVote.executed, "Proposal has already been executed");
 
         Proposal.ProposalDetails memory proposalDetails = proposalContract.getProposal(proposalId);
-        require(block.timestamp >= proposalDetails.creationTime + proposalContract.DURATION(), "Voting period is not over yet");
+        //require(block.timestamp > proposalDetails.creationTime + 7 days, "Voting period not ended");
 
         proposalVote.executed = true;
         bool passed = proposalVote.votesFor > proposalVote.votesAgainst;
+
+        //if (passed) {
+          //  proposalContract.approveProposalForDonations(proposalId);
+        //}
 
         emit ProposalExecuted(proposalId, passed);
     }

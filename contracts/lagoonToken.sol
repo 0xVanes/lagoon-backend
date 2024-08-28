@@ -108,7 +108,7 @@ contract LagoonToken is ERC20, ERC20Permit, Ownable {
     /// @param recipient as the recipient address
     /// @param amount as the number of Lagoon received
     function distributeTokens(address recipient, uint256 amount) external nonReentrant onlyOwner {
-        require(block.timestamp >= lastDonationTime[recipient] + TOKEN_DISTRIBUTION_INTERVAL, "Token distribution not allowed yet");
+        //require(block.timestamp >= lastDonationTime[recipient] + TOKEN_DISTRIBUTION_INTERVAL, "Token distribution not allowed yet");
         uint256 lagoonAmount = _calculateLagoon(amount);
 
         // Mint the calculated lagoon amount to the recipient
@@ -155,4 +155,19 @@ contract LagoonToken is ERC20, ERC20Permit, Ownable {
         distributedLagoon += amount;
         lagoonDistributionPerUser[recipient] += amount;
     }
+
+    /// @dev Burns a specified amount of tokens from the given address.
+    /// @param account The address from which tokens will be burned.
+    /// @param amount The amount of tokens to burn.
+    function burn(address account, uint256 amount) external onlyOwner {
+        _burn(account, amount);
+    }
+
+    /// @dev Returns the Lagoon Token balance of the specified address.
+    /// @param account The address of the account to check the balance for.
+    /// @return The Lagoon Token balance of the specified address.
+    function getLagoonTokenBalance(address account) external view returns (uint256) {
+        return balanceOf(account);
+    }
+
 }
