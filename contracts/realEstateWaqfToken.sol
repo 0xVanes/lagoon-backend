@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
+/**
+* @title realEstateAssetTokenization - A contract to tokenize land waqf assets 
+* @notice This contract tokenize land waqf assets through DAO system
+**/
+
+//import "./lagoonToken.sol";
 
 contract realEstateAssetTokenization {
-    // Define necessary state variables and mappings
+    /* State Variables */
     uint public proposalCount;
-    mapping(uint => Proposal) public proposals;
-    mapping(uint => mapping(address => bool)) public votes; // Declare the votes mapping
-    mapping(address => uint) public landTokenBalance;
-    mapping(address => uint) public dividends;
     address public nazir;
-    address[] public investors;  // Store the list of investor addresses
+    address[] public investors;
+    //LagoonToken public lagoonToken;
 
+    // Struct to Land Token Proposal
     struct Proposal {
         uint id;
         string description;
@@ -19,9 +23,19 @@ contract realEstateAssetTokenization {
         uint totalVotes;
         uint supportVotes;
         uint tokenSupply;
+        uint256 creationTime;
     }
 
-    // Events
+    // Proposal ID per Proposal
+    mapping(uint => Proposal) public proposals;
+    // Proposal ID to Voter address to Voting Yes or No
+    mapping(uint => mapping(address => bool)) public votes;
+    // Investor to TokenBalance
+    mapping(address => uint) public landTokenBalance;
+    // Investor to Dividend
+    mapping(address => uint) public dividends;
+
+    /* Events */
     event ProposalCreated(uint proposalId, string description);
     event Voted(uint proposalId, address voter, bool support);
     event TokenConverted(uint proposalId, uint amount);
@@ -30,12 +44,16 @@ contract realEstateAssetTokenization {
     event TokensSold(uint proposalId, address seller, uint amount);
     event DividendsBurned(uint proposalId, uint amount);
 
-    // Constructor to set the Nazir address
+    /// @dev Initialize who the nazir is
+    /// @param _nazir The name of the token.
     constructor(address _nazir) {
         nazir = _nazir;
+        //lagoonToken = LagoonToken(_lagoonTokenAddress);
     }
 
-    // Proposal Creation
+    /// @dev Create a Land Tokenization Proposal.
+    /// @param description The Description of the Proposal.
+    /// @param priceInRupiah The price of Land Asset in Rupiah.
     function createProposal(string memory description, uint priceInRupiah) public {
         proposalCount++;
         proposals[proposalCount] = Proposal({
@@ -45,19 +63,30 @@ contract realEstateAssetTokenization {
             approved: false,
             totalVotes: 0,
             supportVotes: 0,
-            tokenSupply: 0
+            tokenSupply: 0,
+            creationTime: block.timestamp
         });
         emit ProposalCreated(proposalCount, description);
     }
 
-    // Governance Voting
+    /// @dev A voting system for Land Tokenization Proposal.
+    /// @param proposalId The ID of the proposal
+    /// @param support If the Token Holder support or oppose the proposal
     function voteOnProposal(uint proposalId, bool support) public {
         require(proposals[proposalId].id == proposalId, "Proposal does not exist.");
-        require(votes[proposalId][msg.sender] == false, "You have already voted.");  // Ensure that votes mapping is properly declared and referenced
+        require(votes[proposalId][msg.sender] == false, "You have already voted.");  
+        //uint256 lagoonBalance = lagoonToken.balanceOf(msg.sender);
+        //require(lagoonBalance > 0, "Insufficient Lagoon tokens to vote");
 
         Proposal storage proposal = proposals[proposalId];
         votes[proposalId][msg.sender] = true;
         proposal.totalVotes++;
+
+        // Calculate the 10% of Lagoon tokens
+        //uint256 lagoonToBurn = lagoonBalance / 10;
+
+        // Burn 10% of Lagoon tokens from the voter's balance
+        //lagoonToken.burn(msg.sender, lagoonToBurn);
 
         if (support) {
             proposal.supportVotes++;
@@ -66,11 +95,13 @@ contract realEstateAssetTokenization {
         emit Voted(proposalId, msg.sender, support);
     }
 
-    // Nazir Payment and Token Conversion
+    /// @dev Converting Fiat to Token 1:1
+    /// @param proposalId The ID of the proposal
     function convertToToken(uint proposalId) public payable {
         Proposal storage proposal = proposals[proposalId];
         require(proposal.supportVotes > proposal.totalVotes / 2, "Proposal not approved by majority.");
         require(msg.sender == nazir, "Only Nazir can convert to tokens.");
+        //require(block.timestamp <= Proposal.creationTime + 7 days, "Voting period has ended");
         
         proposal.approved = true;
         uint256 amount = proposal.priceInRupiah;
@@ -81,7 +112,9 @@ contract realEstateAssetTokenization {
         emit TokenConverted(proposalId, proposal.tokenSupply);
     }
 
-    // Investor Payments and Token Distribution
+    /// @dev Investor Payments and Token Distribution.
+    /// @param proposalId The ID of the proposal.
+    /// @param amount The amount of Fiat to invest.
     function invest(uint proposalId, uint amount) public payable {
         Proposal storage proposal = proposals[proposalId];
         require(proposal.approved == true, "Proposal not approved.");
@@ -96,11 +129,13 @@ contract realEstateAssetTokenization {
         emit Invested(proposalId, msg.sender, amount);
     }
 
-    // Dividend Distribution
+    /// @dev To give dividends to investors.
+    /// @param proposalId The ID of the proposal.
+    /// @param percentageDividend How many percent of each investor's token will be given as dividend.
     function distributeDividends(uint proposalId, uint256 percentageDividend) public {
     require(msg.sender == nazir, "Only Nazir can distribute dividends.");
     Proposal storage proposal = proposals[proposalId];
-    uint256 dividendAmount = proposal.tokenSupply / percentageDividend; // Example dividend calculation
+    uint256 dividendAmount = proposal.tokenSupply / percentageDividend; // Dividend calculation
 
     // Mint new tokens for the dividend distribution
     for (uint i = 0; i < investors.length; i++) {
@@ -114,7 +149,9 @@ contract realEstateAssetTokenization {
 }
 
 
-    // Token Sale and Dividend Burning
+    /// @dev Investor can sell the tokens to fiat.
+    /// @param proposalId The ID of the proposal.
+    /// @param amount The amount of token to fiat.
     function sellTokens(uint proposalId, uint amount) public {
         Proposal storage proposal = proposals[proposalId];
         require(msg.sender != nazir, "You are the nazir, You cannot sell your tokens. Must he voted first");

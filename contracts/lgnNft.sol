@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract lgnNft is ERC721Enumerable, Ownable {
+    /* State Variables */
     uint256 private nextTokenId;
     mapping(uint256 => string) private tokenURIs;
     
@@ -15,6 +16,7 @@ contract lgnNft is ERC721Enumerable, Ownable {
     string[] private goldURIs;
     string[] private diamondURIs;
 
+    /// @dev Initializes the contract with the ERC721.
     constructor() ERC721("LagoonNFT", "LGN") Ownable(msg.sender) {
         nextTokenId = 1;
 
